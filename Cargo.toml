@@ -1,0 +1,16 @@
+[package]
+name = "muse-package-manager"
+description = "Package manager for Project Frontier"
+version = "0.1.0"
+edition = "2021"
+license = "Apache 2.0"
+authors = ["CJ Oyer <coyer@nightcycle.us>"]
+
+[lib]
+name = "libmuse"
+path = "src/lib.rs"
+
+[dependencies]
+clap = { version = "4.5.4", features = ["derive"] }
+chrono = "0.4.31"
+toml = "0.8.8"
