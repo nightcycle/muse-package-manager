@@ -4,8 +4,50 @@ use walkdir::WalkDir;
 use serde::Deserialize;
 use semver::VersionReq;
 use std::collections::HashMap;
+use regex::Regex;
 
 const FILE_NAME_STRING: &str = "muse-package.toml";
+
+#[derive(Debug, Deserialize)]
+pub enum SourceType {
+	Unknown,
+	GitHubRelease,
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct PackageSource {
+	pub source_url: String,
+	pub version: VersionReq,
+	pub source_type: SourceType,
+	pub inner_path: String
+}
+
+impl PackageSource {
+	fn new(value: String) -> Self {
+		let tag_start: usize = value.find("/tag/").expect("URL does not contain '/tag/'");
+		let version_start: usize = tag_start + "/tag/".len();
+		let version_end: usize = value[version_start..].find('/').expect("Could not find the end of the version segment") + version_start;
+		
+		let source_url: String = value[..tag_start + "/tag".len()].to_string();
+		let version_string: String = value[version_start..version_end].to_string().to_lowercase().replace("v", "");
+		let inner_path: String = value[version_end + 1..].to_string();
+
+		let version: VersionReq = VersionReq::parse(version_string.as_str()).expect("bad version req");
+		
+		let mut source_type: SourceType = SourceType::Unknown;
+		if Regex::new(r"https://github\.com/.+?/.+?/releases").unwrap().is_match(&source_url){
+			source_type = SourceType::GitHubRelease;
+		}
+
+		return PackageSource{
+			source_url,
+			version,
+			source_type,
+			inner_path
+		};
+	}
+}
 
 #[derive(Debug, Deserialize)]
 struct RawMPMConfig {
@@ -27,28 +69,15 @@ impl RawMPMConfig {
 #[derive(Debug, Deserialize)]
 pub struct MPMDependency{
 	pub name: String,
-	pub version: VersionReq,
-	pub source: String,
-	pub local_path_string: String,
+	pub package_source: PackageSource,
 }
 
 impl MPMDependency {
 	fn new(name: String, value: String) -> Self {
-		let tag_start: usize = value.find("/tag/").expect("URL does not contain '/tag/'");
-		let version_start: usize = tag_start + "/tag/".len();
-		let version_end: usize = value[version_start..].find('/').expect("Could not find the end of the version segment") + version_start;
-		
-		let source: String = value[..tag_start + "/tag".len()].to_string();
-		let version_string: String = value[version_start..version_end].to_string().to_lowercase().replace("v", "");
-		let local_path_string: String = value[version_end + 1..].to_string();
-
-		let version: VersionReq = VersionReq::parse(version_string.as_str()).expect("bad version req");
-				
+		let package_source = PackageSource::new(value);
 		return MPMDependency {
 			name,
-			version,
-			source,
-			local_path_string
+			package_source
 		};	
 	}
 }
