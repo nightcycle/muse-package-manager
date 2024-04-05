@@ -4,8 +4,66 @@ use walkdir::WalkDir;
 use serde::Deserialize;
 use semver::{VersionReq, Version};
 use std::collections::HashMap;
+use tempfile::tempdir;
+use std::fs::File;
+use std::io::copy;
+use zip::ZipArchive;
+use anyhow::{Result, anyhow};
 
 const FILE_NAME_STRING: &str = "muse-package.toml";
+
+fn unzip_file_to_directory(zip_path: &Path, output_path: &Path) -> Result<()> {
+	// Open the .zip file
+	let zip_file = File::open(zip_path)?;
+	let mut archive = ZipArchive::new(zip_file)?;
+
+	// Iterate through each entry in the .zip archive
+	for i in 0..archive.len() {
+		let mut file = archive.by_index(i)?;
+		let file_path = output_path.join(file.sanitized_name());
+
+		// If the file is a directory, create it
+		if file.name().ends_with('/') {
+			std::fs::create_dir_all(&file_path)?;
+		} else {
+			// Ensure the file's parent directory exists
+			if let Some(parent) = file_path.parent() {
+				std::fs::create_dir_all(parent)?;
+			}
+
+			// Write the file contents
+			let mut outfile = File::create(&file_path)?;
+			io::copy(&mut file, &mut outfile)?;
+		}
+	}
+
+	Ok(())
+}
+
+fn find_single_subdirectory(path: &Path) -> Result<PathBuf> {
+	let mut directories: Vec<PathBuf> = Vec::new();
+
+	// Iterate over the entries in the directory.
+	let entries = fs::read_dir(path)?
+		.filter_map(Result::ok) // Filter out Err results and unwrap Ok values.
+		.filter(|entry| entry.path().is_dir()); // Consider only directories.
+
+	// Collect directories
+	for entry in entries {
+		directories.push(entry.path());
+		if directories.len() > 1 {
+			// If more than one directory is found, return an error.
+			return Err(anyhow!("More than one subdirectory found in {}", path.display()));
+		}
+	}
+
+	// Check how many directories were found and act accordingly.
+	match directories.len() {
+		1 => Ok(directories[0].clone()), // Return the first (and only) directory.
+		0 => Err(anyhow!("No subdirectories found in {}", path.display())),
+		_ => unreachable!(), // This case is already handled above, so it's unreachable.
+	}
+ }
 
 #[derive(Debug, Deserialize, PartialEq)]
 pub enum SourceType {
@@ -58,7 +116,8 @@ impl PackageSource {
 
 		let client: std::sync::Arc<octocrab::Octocrab> = octocrab::instance();
 
-		let page: octocrab::Page<octocrab::models::repos::Release> = client.repos(owner, repo)
+		let repos = client.repos(owner, repo);
+		let page: octocrab::Page<octocrab::models::repos::Release> = repos
 			.releases()
 			.list()
 			// Optional Parameters
@@ -71,16 +130,15 @@ impl PackageSource {
 		let mut release_tag_option: Option<String> = None;
 
 		for release in page.items{
-			let tag_name: String = release.tag_name.replace("v", "");
-			match Version::parse(&tag_name) {
+			match Version::parse(&release.tag_name.replace("v", "")) {
 				Ok(release_version) => {
 					if self.version.matches(&release_version){
-						release_tag_option = Some(tag_name.clone()); // Set release_tag here
+						release_tag_option = Some(release.tag_name.clone()); // Set release_tag here
 						break;
 					}
 				}
 				Err(e) => {
-					eprintln!("Failed to parse release with tag '{}': {}", tag_name, e);
+					eprintln!("Failed to parse release with tag '{}': {}", release.tag_name, e);
 				}
 			}
 		}
@@ -88,6 +146,33 @@ impl PackageSource {
 
 		let release_tag: String = release_tag_option.expect("no compatible release found");
 		println!("best={:#?}", release_tag);
+
+		let release: octocrab::models::repos::Release = repos.releases()
+			.get_by_tag(&release_tag)
+			.await.unwrap();
+
+
+		let zip_url = release.zipball_url.expect("bad zip url");
+		println!("zip_url={:#?}", zip_url.to_string());
+
+
+		// Create a temporary directory
+		let dir: tempfile::TempDir = tempdir().unwrap();
+		let file_path: std::path::PathBuf = dir.path().join("repo.zip");
+		let unzip_dir_path: std::path::PathBuf = dir.path().join("unzipped_directory");
+		// Download the asset
+		let response: reqwest::Response = reqwest::get(zip_url.to_string()).await.unwrap();
+			
+		let mut file: File = File::create(file_path).unwrap();
+		let mut content =  std::io::Cursor::new(response.bytes().await.unwrap());
+		copy(&mut content, &mut file).unwrap();
+	
+		unzip_file_to_directory(file_path.as_path(), unzip_dir_path.as_path())?;
+
+		let inner_dir_path = find_single_subdirectory(&unzip_dir_path).unwrap();
+		let inner_package_path = inner_dir_path.join(self.inner_path);
+
+		println!("to inner path: {}", inner_package_path);
 	}
 }
 
