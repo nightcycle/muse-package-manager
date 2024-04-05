@@ -2,13 +2,12 @@ use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 use serde::Deserialize;
-use semver::VersionReq;
+use semver::{VersionReq, Version};
 use std::collections::HashMap;
-use regex::Regex;
 
 const FILE_NAME_STRING: &str = "muse-package.toml";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub enum SourceType {
 	Unknown,
 	GitHubRelease,
@@ -24,21 +23,21 @@ pub struct PackageSource {
 }
 
 impl PackageSource {
-	fn new(value: String) -> Self {
+	pub fn new(value: String) -> Self {
 		let tag_start: usize = value.find("/tag/").expect("URL does not contain '/tag/'");
 		let version_start: usize = tag_start + "/tag/".len();
 		let version_end: usize = value[version_start..].find('/').expect("Could not find the end of the version segment") + version_start;
 		
-		let source_url: String = value[..tag_start + "/tag".len()].to_string();
 		let version_string: String = value[version_start..version_end].to_string().to_lowercase().replace("v", "");
 		let inner_path: String = value[version_end + 1..].to_string();
 
+		let releases_start: usize = value.find("/releases/").expect("URL does not contain '/releases/'");
+
+		let source_url: String = value[..releases_start].to_string();
+
 		let version: VersionReq = VersionReq::parse(version_string.as_str()).expect("bad version req");
 		
-		let mut source_type: SourceType = SourceType::Unknown;
-		if Regex::new(r"https://github\.com/.+?/.+?/releases").unwrap().is_match(&source_url){
-			source_type = SourceType::GitHubRelease;
-		}
+		let source_type: SourceType = SourceType::GitHubRelease;
 
 		return PackageSource{
 			source_url,
@@ -46,6 +45,49 @@ impl PackageSource {
 			source_type,
 			inner_path
 		};
+	}
+	pub async fn download(self: Self){
+		assert!(self.source_type == SourceType::GitHubRelease, "not a supported source");
+
+		// let info_start: usize = self.source_url.find("").expect("URL does not contain 'https://github.com/'");
+		let info_string: &str = &self.source_url["https://github.com/".len()..];
+		let mid_slash_start: usize = info_string.find("/").expect("bad github url");
+
+		let owner: &str = &info_string[..mid_slash_start];
+		let repo: &str = &info_string[(mid_slash_start+1)..];
+
+		let client: std::sync::Arc<octocrab::Octocrab> = octocrab::instance();
+
+		let page: octocrab::Page<octocrab::models::repos::Release> = client.repos(owner, repo)
+			.releases()
+			.list()
+			// Optional Parameters
+			.per_page(100)
+			// .page(5u32)
+			// Send the request
+			.send()
+			.await.unwrap();
+
+		let mut release_tag_option: Option<String> = None;
+
+		for release in page.items{
+			let tag_name: String = release.tag_name.replace("v", "");
+			match Version::parse(&tag_name) {
+				Ok(release_version) => {
+					if self.version.matches(&release_version){
+						release_tag_option = Some(tag_name.clone()); // Set release_tag here
+						break;
+					}
+				}
+				Err(e) => {
+					eprintln!("Failed to parse release with tag '{}': {}", tag_name, e);
+				}
+			}
+		}
+		
+
+		let release_tag: String = release_tag_option.expect("no compatible release found");
+		println!("best={:#?}", release_tag);
 	}
 }
 
@@ -69,21 +111,21 @@ impl RawMPMConfig {
 #[derive(Debug, Deserialize)]
 pub struct MPMDependency{
 	pub name: String,
-	pub package_source: PackageSource,
+	pub source: PackageSource,
 }
 
 impl MPMDependency {
 	fn new(name: String, value: String) -> Self {
-		let package_source = PackageSource::new(value);
+		let source: PackageSource = PackageSource::new(value);
 		return MPMDependency {
 			name,
-			package_source
+			source
 		};	
 	}
 }
 
 #[derive(Debug, Deserialize)]
-pub struct MPMDirectory {
+pub struct MPMPackage {
 	pub name: String,
 	pub path: String,
 	pub is_deprecated: bool,
@@ -91,7 +133,7 @@ pub struct MPMDirectory {
 	pub dependencies: Vec<MPMDependency>,
 }
 
-impl MPMDirectory {
+impl MPMPackage {
 	fn new(config_file_path: &Path) -> Self {
 		let raw_config: RawMPMConfig = RawMPMConfig::new(config_file_path);
 		let name: String = config_file_path.parent() // Option<&Path>
@@ -106,12 +148,12 @@ impl MPMDirectory {
 		let mut dependencies: Vec<MPMDependency> = Vec::new();
 
 		for (dep_name, dep_value) in raw_config.dependencies {
-			let dependency = MPMDependency::new(dep_name.clone(), dep_value.clone());
+			let dependency: MPMDependency = MPMDependency::new(dep_name.clone(), dep_value.clone());
 			dependencies.push(dependency);
 		}
 		let path: String = config_file_path.to_str().expect("string conversion fail").to_owned().to_string();
 
-		return MPMDirectory {
+		return MPMPackage {
 			name,
 			path,
 			is_deprecated,
@@ -122,8 +164,8 @@ impl MPMDirectory {
 }
 
 /// Searches for files named `file_name` under the given `start_dir` directory and returns a Vec with the paths to the files found.
-pub fn search_for_packages(start_dir: &Path) -> Vec<MPMDirectory> {
-	let mut found_configs: Vec<MPMDirectory> = Vec::new();
+pub fn search_for_packages(start_dir: &Path) -> Vec<MPMPackage> {
+	let mut found_configs: Vec<MPMPackage> = Vec::new();
 
 	for entry in WalkDir::new(start_dir).follow_links(true).into_iter().filter_map(|e| e.ok())
 	{
@@ -134,7 +176,7 @@ pub fn search_for_packages(start_dir: &Path) -> Vec<MPMDirectory> {
 			.map(|n| n == FILE_NAME_STRING)
 			.unwrap_or(false)
 		{
-			found_configs.push(MPMDirectory::new(path));
+			found_configs.push(MPMPackage::new(path));
 		}
 	}
 
