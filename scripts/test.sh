@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-cargo run --install
+cargo run -- install

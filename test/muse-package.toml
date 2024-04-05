@@ -1,5 +1,5 @@
 deprecated = false
 public = false
-[dependencies]
-Signal="https://github.com/nightcycle/muse-package-manager/releases/tag/v1.0.0.zip/src/signal"
 
+[dependencies]
+Signal="https://github.com/nightcycle/muse-packages/releases/tag/v0.1.0/src/signal"

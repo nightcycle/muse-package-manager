@@ -14,3 +14,7 @@ path = "src/lib.rs"
 clap = { version = "4.5.4", features = ["derive"] }
 chrono = "0.4.31"
 toml = "0.8.8"
+serde = { version = "1.0.197", features = ["derive"] }
+walkdir = "2.5.0"
+anyhow = "1.0.81"
+semver = { version = "1.0.22", features = ["serde"] }
