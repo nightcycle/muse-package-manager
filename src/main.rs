@@ -1,14 +1,14 @@
+#[macro_use]
+extern crate pest_derive;
+extern crate pest;
+
+use std::fs;
+use std::io::Write;
 use clap::{Parser, Subcommand};
 use libmuse::package::{search_for_packages, MPMPackage};
-use std::env;
-
-// #[derive(ValueEnum, Clone, Debug)]
-// enum VersionBump {
-//     Major,
-//     Minor,
-//     Patch,
-// }
-
+use libmuse::package_source::PackageSourceContent;
+use libmuse::csharp_parse::compile_to_single_script;
+use std::{collections::HashMap, env, path::PathBuf};
 
 #[derive(Parser)]
 #[command(name = "mpm", about = "A Rust-based package manager for Project Frontier", long_about = None)]
@@ -17,17 +17,16 @@ struct Args {
 	command: MPMCommand,
 }
 
-
-
 #[derive(Subcommand)]
 enum MPMCommand {
-	/// installs all the packages in the workspace
 	Install,
-	// /// Publishes the current package with a version bump
-	// Update {
-	// 	#[arg(short, long, value_enum)]
-	// 	version: VersionBump,
-	// },
+	/// Build command takes input and output paths
+	Build {
+		#[arg(short, long)]
+		input: PathBuf,
+		#[arg(short, long)]
+		output: PathBuf,
+	},
 }
 
 #[tokio::main]
@@ -38,20 +37,41 @@ async fn main() {
 		MPMCommand::Install => {
 			let cwd = env::current_dir().unwrap();
 			let mpm_packages: Vec<MPMPackage> = search_for_packages(cwd.as_path());
-			
-			println!("Installing muse packages {:#?}", mpm_packages);
+			let mut source_cache: HashMap<String, PackageSourceContent> = HashMap::new();
+			// println!("Installing muse packages {:#?}", mpm_packages);
 			for mpm_package in mpm_packages {
-				for mpm_dependency in mpm_package.dependencies{
-					mpm_dependency.source.download().await;
+				source_cache = mpm_package.solve(source_cache).await;
+			}
+		},
+		MPMCommand::Build { 
+			input, 
+			output 
+		} => {
+			let namespace_name: String = output.file_stem().unwrap().to_str().unwrap().to_string();
+			let mut scripts: HashMap<String, String> = HashMap::new();
+
+			println!("Building from {:?} to {:?} as {}", input, output, namespace_name);
+			for entry in fs::read_dir(input).unwrap() {
+				let entry = entry.unwrap();
+				let path = entry.path();
+				
+				// Ensure the entry is a file
+				if path.is_file() {
+					// Get the file name as a String
+					if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+						// Read the file's contents into a String
+						let contents: String = fs::read_to_string(&path).unwrap();
+						// Insert the file name and contents into the map
+						scripts.insert(name.to_owned(), contents);
+					}
 				}
 			}
-		}
-		// MPMCommand::Update { version } => {
-		// 	match version {
-		// 	    VersionBump::Major => println!("Update muse packages - Major version"),
-		// 	    VersionBump::Minor => println!("Update muse packages - Minor version"),
-		// 	    VersionBump::Patch => println!("Update muse packages - Patch version"),
-		// 	}
-		//  }
+			let content: String = compile_to_single_script(namespace_name, scripts);
+			if output.exists(){
+				fs::remove_file(output.clone()).expect("bad remove");
+			}
+
+			fs::write(&output, content).expect("Unable to write to output file");
+		},
 	}
 }

@@ -1,185 +1,14 @@
+use core::str;
 use std::fs;
-use std::env;
-use std::io;
-use std::io::Read;
-use std::io::Write;
+
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use serde::Deserialize;
-use semver::{VersionReq, Version};
+
+use super::package_source::{PackageSource, PackageSourceContent};
 use std::collections::HashMap;
-use tempfile::tempdir;
-use std::fs::File;
-use std::io::copy;
-use zip::ZipArchive;
-use anyhow::{Result, anyhow};
 
 const FILE_NAME_STRING: &str = "muse-package.toml";
-
-fn unzip_file_to_directory(zip_path: &Path, output_path: &Path){
-	// Open the .zip file
-	println!("zip_path={}", zip_path.to_str().unwrap());
-	let zip_file = File::open(zip_path).unwrap();
-	let mut archive: ZipArchive<File> = ZipArchive::new(zip_file).unwrap();
-
-	// Iterate through each entry in the .zip archive
-	for i in 0..archive.len() {
-		let mut file = archive.by_index(i).unwrap();
-		let file_path = output_path.join(file.mangled_name());
-
-		// If the file is a directory, create it
-		if file.name().ends_with('/') {
-			std::fs::create_dir_all(&file_path).unwrap();
-		} else {
-			// Ensure the file's parent directory exists
-			if let Some(parent) = file_path.parent() {
-				std::fs::create_dir_all(parent).unwrap();
-			}
-
-			// Write the file contents
-			let mut outfile = File::create(&file_path).unwrap();
-			let _ = io::copy(&mut file, &mut outfile);
-		}
-	}
-}
-
-fn find_single_subdirectory(path: &Path) -> Result<PathBuf> {
-	let mut directories: Vec<PathBuf> = Vec::new();
-
-	// Iterate over the entries in the directory.
-	let entries = fs::read_dir(path)?
-		.filter_map(Result::ok) // Filter out Err results and unwrap Ok values.
-		.filter(|entry| entry.path().is_dir()); // Consider only directories.
-
-	// Collect directories
-	for entry in entries {
-		directories.push(entry.path());
-		if directories.len() > 1 {
-			// If more than one directory is found, return an error.
-			return Err(anyhow!("More than one subdirectory found in {}", path.display()));
-		}
-	}
-
-	// Check how many directories were found and act accordingly.
-	match directories.len() {
-		1 => Ok(directories[0].clone()), // Return the first (and only) directory.
-		0 => Err(anyhow!("No subdirectories found in {}", path.display())),
-		_ => unreachable!(), // This case is already handled above, so it's unreachable.
-	}
- }
-
-#[derive(Debug, Deserialize, PartialEq)]
-pub enum SourceType {
-	Unknown,
-	GitHubRelease,
-}
-
-
-#[derive(Debug, Deserialize)]
-pub struct PackageSource {
-	pub source_url: String,
-	pub version: VersionReq,
-	pub source_type: SourceType,
-	pub inner_path: String
-}
-
-impl PackageSource {
-	pub fn new(value: String) -> Self {
-		let tag_start: usize = value.find("/tag/").expect("URL does not contain '/tag/'");
-		let version_start: usize = tag_start + "/tag/".len();
-		let version_end: usize = value[version_start..].find('/').expect("Could not find the end of the version segment") + version_start;
-		
-		let version_string: String = value[version_start..version_end].to_string().to_lowercase().replace("v", "");
-		let inner_path: String = value[version_end + 1..].to_string();
-
-		let releases_start: usize = value.find("/releases/").expect("URL does not contain '/releases/'");
-
-		let source_url: String = value[..releases_start].to_string();
-
-		let version: VersionReq = VersionReq::parse(version_string.as_str()).expect("bad version req");
-		
-		let source_type: SourceType = SourceType::GitHubRelease;
-
-		return PackageSource{
-			source_url,
-			version,
-			source_type,
-			inner_path
-		};
-	}
-	pub async fn download(self: Self){
-		assert!(self.source_type == SourceType::GitHubRelease, "not a supported source");
-
-		// let info_start: usize = self.source_url.find("").expect("URL does not contain 'https://github.com/'");
-		let info_string: &str = &self.source_url["https://github.com/".len()..];
-		let mid_slash_start: usize = info_string.find("/").expect("bad github url");
-
-		let owner: &str = &info_string[..mid_slash_start];
-		let repo: &str = &info_string[(mid_slash_start+1)..];
-
-		let client: std::sync::Arc<octocrab::Octocrab> = octocrab::instance();
-
-		let repos = client.repos(owner, repo);
-		let page: octocrab::Page<octocrab::models::repos::Release> = repos
-			.releases()
-			.list()
-			// Optional Parameters
-			.per_page(100)
-			// .page(5u32)
-			// Send the request
-			.send()
-			.await.unwrap();
-
-		let mut release_tag_option: Option<String> = None;
-
-		for release in page.items{
-			match Version::parse(&release.tag_name.replace("v", "")) {
-				Ok(release_version) => {
-					if self.version.matches(&release_version){
-						release_tag_option = Some(release.tag_name.clone()); // Set release_tag here
-						break;
-					}
-				}
-				Err(e) => {
-					eprintln!("Failed to parse release with tag '{}': {}", release.tag_name, e);
-				}
-			}
-		}
-		
-
-		let release_tag: String = release_tag_option.expect("no compatible release found");
-
-		let release: octocrab::models::repos::Release = repos.releases()
-			.get_by_tag(&release_tag)
-			.await.unwrap();
-
-		let zip_url: reqwest::Url = release.zipball_url.expect("bad zip url");
-		println!("zip_url={:#?}", zip_url.to_string());
-
-		// Create a temporary directory
-		let dir: tempfile::TempDir = tempdir().unwrap();
-		let dir_path: &Path = dir.path();
-		let file_path: std::path::PathBuf = dir_path.join("repo.zip");
-
-		// Download the asset
-		let client = reqwest::Client::new();
-		let response: reqwest::Response = client.get(zip_url.to_string())
-			.header("User-Agent", "request").send().await.unwrap();
-		
-		let data = response.bytes().await.unwrap();
-		let mut file: File = File::create(file_path.clone()).unwrap();
-		let mut content =  std::io::Cursor::new(data);
-		copy(&mut content, &mut file).unwrap();
-
-		let unzip_dir_path: std::path::PathBuf = dir_path.join("unzipped_directory");
-		unzip_file_to_directory(file_path.as_path(), unzip_dir_path.as_path());
-
-		let inner_dir_path: PathBuf = find_single_subdirectory(&unzip_dir_path).unwrap();
-		let inner_package_path: PathBuf = inner_dir_path.join(self.inner_path);
-
-		println!("to inner path: {:#?}", inner_package_path.to_string_lossy());
-	}
-}
 
 #[derive(Debug, Deserialize)]
 struct RawMPMConfig {
@@ -198,26 +27,43 @@ impl RawMPMConfig {
 	}
 }
 
+
 #[derive(Debug, Deserialize)]
 pub struct MPMDependency{
 	pub name: String,
-	pub source: PackageSource,
+	pub path_buf: PathBuf,
+	source: PackageSource,
 }
 
 impl MPMDependency {
-	fn new(name: String, value: String) -> Self {
+	fn new(name: String, path_buf: PathBuf, value: String) -> Self {
 		let source: PackageSource = PackageSource::new(value);
 		return MPMDependency {
 			name,
+			path_buf,
 			source
 		};	
+	}
+	pub async fn solve(self: Self, original_source_cache: HashMap<String, PackageSourceContent>) -> HashMap<String, PackageSourceContent>{
+		let mut new_source_cache: HashMap<String, PackageSourceContent> = original_source_cache.clone();
+
+		let content: String;
+		(new_source_cache, content) = self.source.solve(self.name, new_source_cache.clone()).await;
+		println!("content={}", content);
+		if self.path_buf.exists(){
+			fs::remove_file(self.path_buf.clone()).expect("remove fail");
+		}
+
+		fs::write(self.path_buf, content).expect("write fail");
+
+		return new_source_cache;
 	}
 }
 
 #[derive(Debug, Deserialize)]
 pub struct MPMPackage {
 	pub name: String,
-	pub path: String,
+	pub config_path_buf: PathBuf,
 	pub is_deprecated: bool,
 	pub is_public: bool,
 	pub dependencies: Vec<MPMDependency>,
@@ -237,19 +83,36 @@ impl MPMPackage {
 
 		let mut dependencies: Vec<MPMDependency> = Vec::new();
 
+		let dir_path_buf = config_file_path.parent().unwrap().to_path_buf();
 		for (dep_name, dep_value) in raw_config.dependencies {
-			let dependency: MPMDependency = MPMDependency::new(dep_name.clone(), dep_value.clone());
+			let dep_file_name: String = format!("{}.cs", dep_name);
+			let dep_path_buf = dir_path_buf.join(&dep_file_name);
+			let dependency: MPMDependency = MPMDependency::new(
+				dep_name.clone(), 
+				dep_path_buf,
+				dep_value.clone()
+			);
 			dependencies.push(dependency);
 		}
-		let path: String = config_file_path.to_str().expect("string conversion fail").to_owned().to_string();
+		let config_path_buf: PathBuf = config_file_path.to_path_buf(); //.to_str().expect("string conversion fail").to_owned().to_string();
 
 		return MPMPackage {
 			name,
-			path,
+			config_path_buf,
 			is_deprecated,
 			is_public,
 			dependencies
 		};
+	}
+
+	pub async fn solve(self: Self, original_source_cache: HashMap<String, PackageSourceContent>) -> HashMap<String, PackageSourceContent>{
+		let mut new_source_cache: HashMap<String, PackageSourceContent> = original_source_cache.clone();
+
+		for mpm_dependency in self.dependencies{
+			new_source_cache = mpm_dependency.solve(new_source_cache).await;
+		}
+
+		return new_source_cache;
 	}
 }
 
