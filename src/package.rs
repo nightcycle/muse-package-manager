@@ -1,5 +1,9 @@
 use std::fs;
-use std::path::Path;
+use std::env;
+use std::io;
+use std::io::Read;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use serde::Deserialize;
 use semver::{VersionReq, Version};
@@ -12,32 +16,31 @@ use anyhow::{Result, anyhow};
 
 const FILE_NAME_STRING: &str = "muse-package.toml";
 
-fn unzip_file_to_directory(zip_path: &Path, output_path: &Path) -> Result<()> {
+fn unzip_file_to_directory(zip_path: &Path, output_path: &Path){
 	// Open the .zip file
-	let zip_file = File::open(zip_path)?;
-	let mut archive = ZipArchive::new(zip_file)?;
+	println!("zip_path={}", zip_path.to_str().unwrap());
+	let zip_file = File::open(zip_path).unwrap();
+	let mut archive: ZipArchive<File> = ZipArchive::new(zip_file).unwrap();
 
 	// Iterate through each entry in the .zip archive
 	for i in 0..archive.len() {
-		let mut file = archive.by_index(i)?;
-		let file_path = output_path.join(file.sanitized_name());
+		let mut file = archive.by_index(i).unwrap();
+		let file_path = output_path.join(file.mangled_name());
 
 		// If the file is a directory, create it
 		if file.name().ends_with('/') {
-			std::fs::create_dir_all(&file_path)?;
+			std::fs::create_dir_all(&file_path).unwrap();
 		} else {
 			// Ensure the file's parent directory exists
 			if let Some(parent) = file_path.parent() {
-				std::fs::create_dir_all(parent)?;
+				std::fs::create_dir_all(parent).unwrap();
 			}
 
 			// Write the file contents
-			let mut outfile = File::create(&file_path)?;
-			io::copy(&mut file, &mut outfile)?;
+			let mut outfile = File::create(&file_path).unwrap();
+			let _ = io::copy(&mut file, &mut outfile);
 		}
 	}
-
-	Ok(())
 }
 
 fn find_single_subdirectory(path: &Path) -> Result<PathBuf> {
@@ -145,34 +148,36 @@ impl PackageSource {
 		
 
 		let release_tag: String = release_tag_option.expect("no compatible release found");
-		println!("best={:#?}", release_tag);
 
 		let release: octocrab::models::repos::Release = repos.releases()
 			.get_by_tag(&release_tag)
 			.await.unwrap();
 
-
-		let zip_url = release.zipball_url.expect("bad zip url");
+		let zip_url: reqwest::Url = release.zipball_url.expect("bad zip url");
 		println!("zip_url={:#?}", zip_url.to_string());
-
 
 		// Create a temporary directory
 		let dir: tempfile::TempDir = tempdir().unwrap();
-		let file_path: std::path::PathBuf = dir.path().join("repo.zip");
-		let unzip_dir_path: std::path::PathBuf = dir.path().join("unzipped_directory");
+		let dir_path: &Path = dir.path();
+		let file_path: std::path::PathBuf = dir_path.join("repo.zip");
+
 		// Download the asset
-		let response: reqwest::Response = reqwest::get(zip_url.to_string()).await.unwrap();
-			
-		let mut file: File = File::create(file_path).unwrap();
-		let mut content =  std::io::Cursor::new(response.bytes().await.unwrap());
+		let client = reqwest::Client::new();
+		let response: reqwest::Response = client.get(zip_url.to_string())
+			.header("User-Agent", "request").send().await.unwrap();
+		
+		let data = response.bytes().await.unwrap();
+		let mut file: File = File::create(file_path.clone()).unwrap();
+		let mut content =  std::io::Cursor::new(data);
 		copy(&mut content, &mut file).unwrap();
-	
-		unzip_file_to_directory(file_path.as_path(), unzip_dir_path.as_path())?;
 
-		let inner_dir_path = find_single_subdirectory(&unzip_dir_path).unwrap();
-		let inner_package_path = inner_dir_path.join(self.inner_path);
+		let unzip_dir_path: std::path::PathBuf = dir_path.join("unzipped_directory");
+		unzip_file_to_directory(file_path.as_path(), unzip_dir_path.as_path());
 
-		println!("to inner path: {}", inner_package_path);
+		let inner_dir_path: PathBuf = find_single_subdirectory(&unzip_dir_path).unwrap();
+		let inner_package_path: PathBuf = inner_dir_path.join(self.inner_path);
+
+		println!("to inner path: {:#?}", inner_package_path.to_string_lossy());
 	}
 }
 
