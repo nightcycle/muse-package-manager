@@ -78,7 +78,7 @@ pub fn compile_to_single_script(
 		.iter()
 		.map(|s| s.replace("namespace ", ""))
 		.collect();
-	println!("prior_namespaces={:#?}", cleaned_namespaces);
+	// println!("prior_namespaces={:#?}", cleaned_namespaces);
 
 	let mut usage_list: Vec<String> = get_matching_lines(&mega_script, &using_pattern);
 	usage_list = deduplicate(usage_list);
@@ -100,7 +100,7 @@ pub fn compile_to_single_script(
 		}
 	}
 	mega_script = header_string + &format!("\nnamespace {}", &target_namespace.as_str()) + "\n{\n" + &mega_script + "\n}";
-	println!("usage_line={:#?}", cleaned_namespaces);
+	// println!("usage_line={:#?}", cleaned_namespaces);
 	
 
 	// let namespace_pattern: Regex = Regex::new(r"namespace\s+[A-Za-z0-9]").unwrap();
@@ -112,6 +112,6 @@ pub fn compile_to_single_script(
 	// 	mega_script = mega_script.replace(&key, &format!("namespace {}",value));
 	// 	mega_script = mega_script.replace(&key.replace("namespace ", "using "), &format!("using {}",value));
 	// }
-
+	
 	return mega_script;
 }

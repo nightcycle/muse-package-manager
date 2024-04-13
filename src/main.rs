@@ -34,9 +34,10 @@ async fn main() {
 	match args.command {
 		MPMCommand::Install => {
 			let cwd = env::current_dir().unwrap();
+			println!("Searching for muse-package.toml's");
 			let mpm_packages: Vec<MPMPackage> = search_for_packages(cwd.as_path());
 			let mut source_cache: HashMap<String, PackageSourceContent> = HashMap::new();
-			// println!("Installing muse packages {:#?}", mpm_packages);
+
 			for mpm_package in mpm_packages {
 				source_cache = mpm_package.solve(source_cache).await;
 			}

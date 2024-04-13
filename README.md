@@ -18,7 +18,8 @@ Example:
 deprecated = false # unimplemented, will eventually send a warning to anyone that installs it for them to update
 
 [dependencies]
-Signal="https://github.com/nightcycle/muse-packages/releases/tag/v0.1.0/src/signal"
+Signal="https://github.com/nightcycle/muse-packages/releases/tag/v1.2.3/directory/signal"
+Option="https://github.com/nightcycle/muse-packages/releases/tag/v4.5.6/directory/option"
 ```
 
 A dependency contains multiple parts
