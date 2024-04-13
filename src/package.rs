@@ -8,7 +8,7 @@ use semver::Version;
 use super::package_source::{PackageSource, PackageSourceContent};
 use std::collections::HashMap;
 
-const FILE_NAME_STRING: &str = "muse-package.toml";
+pub const FILE_NAME_STRING: &str = "muse-package.toml";
 
 #[derive(Debug, Deserialize)]
 struct RawMPMConfig {
@@ -109,6 +109,20 @@ impl MPMPackage {
 
 		return new_source_cache;
 	}
+}
+
+pub fn find_package(package_dir: &Path) -> Option<MPMPackage>{
+	let mut mpm_package_opt: Option<MPMPackage> = None;
+
+	for file_entry in fs::read_dir(package_dir).unwrap() {
+		let file_entry: fs::DirEntry = file_entry.unwrap();
+		let file_path: PathBuf = file_entry.path();
+		if file_path.file_name().unwrap() == FILE_NAME_STRING {
+			mpm_package_opt = Some(MPMPackage::new(&file_path));
+			return mpm_package_opt;
+		}
+	}
+	return mpm_package_opt;
 }
 
 /// Searches for files named `file_name` under the given `start_dir` directory and returns a Vec with the paths to the files found.

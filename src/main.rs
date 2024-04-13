@@ -5,7 +5,7 @@ use std::fs;
 use std::io::Read;
 use std::str::FromStr;
 use clap::{Parser, Subcommand};
-use libmuse::package::{search_for_packages, MPMPackage};
+use libmuse::package::{search_for_packages, MPMPackage, find_package, FILE_NAME_STRING};
 use libmuse::package_source::PackageSourceContent;
 use libmuse::csharp_parse::compile_to_single_script;
 use std::{collections::HashMap, env, path::PathBuf, path::Path};
@@ -20,7 +20,10 @@ struct Args {
 
 #[derive(Subcommand)]
 enum MPMCommand {
-	Install,
+	Install {
+		#[arg(short = 'c', long)]
+		path: Option<PathBuf>,
+	},
 	/// Build command takes input and output paths
 	Build {
 		#[arg(short, long)]
@@ -45,11 +48,23 @@ async fn main() {
 	let args: Args = Args::parse();
 
 	match args.command {
-		MPMCommand::Install => {
+		MPMCommand::Install { 
+			path, 
+		} => {
 			let cwd = env::current_dir().unwrap();
-			println!("Searching for muse-package.toml's");
 			let cwd_path: &Path = cwd.as_path();
-			let mpm_packages: Vec<MPMPackage> = search_for_packages(cwd_path);
+			let mut mpm_packages: Vec<MPMPackage> = Vec::new();
+			if path.is_some(){
+				let package_path = path.unwrap();
+				let mpm_package_opt = find_package(package_path.as_path());
+				let mpm_package = mpm_package_opt.expect(format!("couldn't find '{}' at '{}'", FILE_NAME_STRING, package_path.to_str().unwrap()).as_str());
+				mpm_packages.insert(mpm_packages.len(), mpm_package);
+			}else{
+				println!("Searching for muse-package.toml's");
+				mpm_packages = search_for_packages(cwd_path);
+			}
+
+
 			let mut source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>> = HashMap::new();
 			let cache_path_buff: PathBuf = cwd_path.join(CACHE_DIR_NAME);
 			let cache_path: &Path = cache_path_buff.as_path();
@@ -60,7 +75,7 @@ async fn main() {
 					let dir_name: String = decode_path_safe_b64_to_str(&dir_path.file_name().unwrap().to_str().unwrap());
 					let source_url_key: PathBuf = PathBuf::from_str(&dir_name).unwrap();
 
-					println!("dir_name={}", source_url_key.to_str().unwrap());
+					// println!("dir_name={}", source_url_key.to_str().unwrap());
 
 					if dir_path.is_dir(){
 						let mut version_cache: HashMap<Version, PackageSourceContent> = HashMap::new();
@@ -68,7 +83,7 @@ async fn main() {
 							let file_entry: fs::DirEntry = file_entry.unwrap();
 							let file_path: PathBuf = file_entry.path();
 							let file_name = file_path.file_stem().unwrap().to_str().unwrap();
-							println!("file_name={}", file_name);
+							// println!("file_name={}", file_name);
 							let version_name: String = decode_path_safe_b64_to_str(file_name);
 							let version: Version = Version::parse(&version_name).unwrap();
 							let mut file: fs::File = fs::File::open(file_path).unwrap();
@@ -82,7 +97,7 @@ async fn main() {
 								version,
 								source_url
 							});
-							println!("version_name={}", version_name);
+							// println!("version_name={}", version_name);
 						}
 						source_cache.insert(source_url_key, version_cache);
 					}
