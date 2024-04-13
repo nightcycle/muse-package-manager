@@ -12,8 +12,7 @@ const FILE_NAME_STRING: &str = "muse-package.toml";
 
 #[derive(Debug, Deserialize)]
 struct RawMPMConfig {
-	pub deprecated: bool,
-	pub public: bool,
+	pub deprecated: Option<bool>,
 	pub dependencies: HashMap<String, String>,
 }
 
@@ -64,8 +63,7 @@ impl MPMDependency {
 pub struct MPMPackage {
 	pub name: String,
 	pub config_path_buf: PathBuf,
-	pub is_deprecated: bool,
-	pub is_public: bool,
+	pub is_deprecated: Option<bool>,
 	pub dependencies: Vec<MPMDependency>,
 }
 
@@ -78,8 +76,7 @@ impl MPMPackage {
 			.expect("Failed to extract directory name from path") // Panics if None
 			.to_owned();
 
-		let is_deprecated: bool = raw_config.deprecated;
-		let is_public: bool = raw_config.public;
+		let is_deprecated: Option<bool> = raw_config.deprecated;
 
 		let mut dependencies: Vec<MPMDependency> = Vec::new();
 
@@ -100,7 +97,6 @@ impl MPMPackage {
 			name,
 			config_path_buf,
 			is_deprecated,
-			is_public,
 			dependencies
 		};
 	}
