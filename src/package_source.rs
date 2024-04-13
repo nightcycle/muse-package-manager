@@ -1,4 +1,5 @@
 use std::io::copy;
+use std::str::FromStr;
 use zip::ZipArchive;
 use semver::{VersionReq, Version};
 use tempfile::tempdir;
@@ -63,6 +64,39 @@ fn find_single_subdirectory(path: &Path) -> Result<PathBuf> {
 	}
 }
 
+fn get_psc_from_cache(
+	source_url: PathBuf,
+	version_req: VersionReq,
+	source_cache: &HashMap<PathBuf, HashMap<Version, PackageSourceContent>>
+) -> Option<PackageSourceContent>{
+	let mut package_source_content_opt: Option<PackageSourceContent> = None;
+	
+	if source_cache.contains_key(&source_url){
+		for (version, psc) in source_cache.get(&source_url).unwrap() {
+			if version_req.matches(&version){
+				package_source_content_opt = Some(psc.clone());
+			}
+		}
+	}
+
+	return package_source_content_opt;
+}
+
+fn save_psc_into_cache(original_package_source_content: PackageSourceContent, original_source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>>) -> HashMap<PathBuf, HashMap<Version, PackageSourceContent>>{
+	let mut source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>> = original_source_cache.clone();
+	let package_source_content: PackageSourceContent = original_package_source_content.clone();
+	
+	if source_cache.contains_key(&package_source_content.source_url) == false{
+		source_cache.insert(package_source_content.source_url, HashMap::new());
+	}
+
+	let path: PathBuf = original_package_source_content.source_url.clone();
+
+	let mut version_cache: HashMap<Version, PackageSourceContent> = source_cache.get(&path).unwrap().to_owned();
+	version_cache.insert(package_source_content.version, original_package_source_content);
+	source_cache.insert(path, version_cache);
+	return source_cache
+}
 
 #[derive(Debug, Deserialize, PartialEq)]
 pub enum SourceType {
@@ -75,21 +109,23 @@ pub struct PackageSourceContent{
 	pub key: String,
 	inner_path: String,
 	data: bytes::Bytes,
-	source_url: String,
+	pub version: Version,
+	pub source_url: PathBuf,
 }
 
 impl PackageSourceContent {
 	pub async fn new(
-		source_url: String,
+		source_url: PathBuf,
 		version_req: VersionReq,
 		source_type: SourceType,
 		inner_path: String,
 	) -> Self{
-		println!("downloading {}", source_url);
+		let source_url_str: &str = source_url.to_str().unwrap();
+		println!("downloading {}", &source_url_str);
 		assert!(source_type == SourceType::GitHubRelease, "not a supported source");
 
 		// let info_start: usize = self.source_url.find("").expect("URL does not contain 'https://github.com/'");
-		let info_string: &str = &source_url["https://github.com/".len()..];
+		let info_string: &str = &source_url_str["https://github.com/".len()..];
 		let mid_slash_start: usize = info_string.find("/").expect("bad github url");
 
 		let owner: &str = &info_string[..mid_slash_start];
@@ -109,14 +145,14 @@ impl PackageSourceContent {
 			.await.unwrap();
 
 		let mut release_tag_option: Option<String> = None;
-		// let mut release_version_option: Option<Version> = None;
+		let mut release_version_option: Option<Version> = None;
 
 		for release in page.items{
 			match Version::parse(&release.tag_name.replace("v", "")) {
 				Ok(release_version) => {
 					if version_req.matches(&release_version){
 						release_tag_option = Some(release.tag_name.clone()); // Set release_tag here
-						// release_version_option = Some(release_version);
+						release_version_option = Some(release_version);
 						break;
 					}
 				}
@@ -147,12 +183,14 @@ impl PackageSourceContent {
 		let data = response.bytes().await.unwrap();
 
 		// let version = release_version_option.unwrap();
-		let key = info_string.to_string();
-
+		let key = format!("github->{}@{}", info_string.to_string(), release_tag);
+		println!("key='{}'", key);
+		let version: Version = release_version_option.unwrap();
 		return PackageSourceContent{
 			key,
 			inner_path,
 			data,
+			version,
 			source_url
 		};
 	}
@@ -205,7 +243,7 @@ impl PackageSourceContent {
 
 		
 		return compile_to_single_script(
-			format!("DO NOT EDIT!\ndownloaded from '{}' and compiled into single script using 'github.com/nightcycle/muse-package-manager'", self.source_url),
+			format!("DO NOT EDIT!\n// downloaded from '{}' and compiled into single script using 'github.com/nightcycle/muse-package-manager'", self.source_url.to_str().unwrap()),
 			target_namespace_name, 
 			scripts
 		);
@@ -214,8 +252,7 @@ impl PackageSourceContent {
 
 #[derive(Debug, Deserialize)]
 pub struct PackageSource {
-	key: String,
-	pub source_url: String,
+	pub source_url: PathBuf,
 	pub version_req: VersionReq,
 	pub source_type: SourceType,
 	pub inner_path: String
@@ -232,15 +269,13 @@ impl PackageSource {
 
 		let releases_start: usize = value.find("/releases/").expect("URL does not contain '/releases/'");
 
-		let source_url: String = value[..releases_start].to_string();
+		let source_url: PathBuf = PathBuf::from_str(&value[..releases_start].to_string()).unwrap();
 
 		let version_req: VersionReq = VersionReq::parse(version_string.as_str()).expect("bad version req");
 		
 		let source_type: SourceType = SourceType::GitHubRelease;
 
-		let key = value;
 		return PackageSource{
-			key,
 			source_url,
 			version_req,
 			source_type,
@@ -251,26 +286,29 @@ impl PackageSource {
 	pub async fn solve(
 		self: Self, 
 		namespace_name: String,
-		source_cache: HashMap<String, PackageSourceContent>) -> (HashMap<String, PackageSourceContent>, String){
+		source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>>
+	) -> (HashMap<PathBuf, HashMap<Version, PackageSourceContent>>, String){
 
-		if source_cache.contains_key(&self.key){		
-			let package_source_content: PackageSourceContent = source_cache[&self.key].clone();
+		let content_option: Option<PackageSourceContent> = get_psc_from_cache(
+			self.source_url.clone(),
+			self.version_req.clone(),
+			&source_cache
+		);
+		
+		if content_option.is_some(){		
+			let package_source_content: PackageSourceContent = content_option.unwrap();
 			return (source_cache, package_source_content.compile(namespace_name));
 		}else{
-			let content: PackageSourceContent = PackageSourceContent::new(
+			let package_source_content: PackageSourceContent = PackageSourceContent::new(
 				self.source_url, 
 				self.version_req, 
 				self.source_type, 
 				self.inner_path
 			).await;
 
-			let mut new_source_cache: HashMap<String, PackageSourceContent> = source_cache.clone();
-			new_source_cache.insert(
-				self.key.clone(),
-				content
-			);
+			
+			let new_source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>> = save_psc_into_cache(package_source_content.clone(), source_cache);
 
-			let package_source_content: PackageSourceContent = new_source_cache[&self.key].clone();
 			return (new_source_cache, package_source_content.compile(namespace_name));
 		}
 

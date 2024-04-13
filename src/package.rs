@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use serde::Deserialize;
-
+use semver::Version;
 use super::package_source::{PackageSource, PackageSourceContent};
 use std::collections::HashMap;
 
@@ -43,8 +43,8 @@ impl MPMDependency {
 			source
 		};	
 	}
-	pub async fn solve(self: Self, original_source_cache: HashMap<String, PackageSourceContent>) -> HashMap<String, PackageSourceContent>{
-		let mut new_source_cache: HashMap<String, PackageSourceContent> = original_source_cache.clone();
+	pub async fn solve(self: Self, original_source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>>) -> HashMap<PathBuf, HashMap<Version, PackageSourceContent>>{
+		let mut new_source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>> = original_source_cache.clone();
 
 		let content: String;
 		(new_source_cache, content) = self.source.solve(self.name, new_source_cache.clone()).await;
@@ -100,8 +100,8 @@ impl MPMPackage {
 		};
 	}
 
-	pub async fn solve(self: Self, original_source_cache: HashMap<String, PackageSourceContent>) -> HashMap<String, PackageSourceContent>{
-		let mut new_source_cache: HashMap<String, PackageSourceContent> = original_source_cache.clone();
+	pub async fn solve(self: Self, original_source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>>) -> HashMap<PathBuf, HashMap<Version, PackageSourceContent>>{
+		let mut new_source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>> = original_source_cache.clone();
 
 		for mpm_dependency in self.dependencies{
 			new_source_cache = mpm_dependency.solve(new_source_cache).await;

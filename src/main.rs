@@ -7,7 +7,7 @@ use libmuse::package::{search_for_packages, MPMPackage};
 use libmuse::package_source::PackageSourceContent;
 use libmuse::csharp_parse::compile_to_single_script;
 use std::{collections::HashMap, env, path::PathBuf};
-
+use semver::Version;
 #[derive(Parser)]
 #[command(name = "mpm", about = "A Rust-based package manager for Project Frontier", long_about = None)]
 struct Args {
@@ -36,7 +36,7 @@ async fn main() {
 			let cwd = env::current_dir().unwrap();
 			println!("Searching for muse-package.toml's");
 			let mpm_packages: Vec<MPMPackage> = search_for_packages(cwd.as_path());
-			let mut source_cache: HashMap<String, PackageSourceContent> = HashMap::new();
+			let mut source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>> = HashMap::new();
 
 			for mpm_package in mpm_packages {
 				source_cache = mpm_package.solve(source_cache).await;
