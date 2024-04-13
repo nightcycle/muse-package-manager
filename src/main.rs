@@ -20,11 +20,12 @@ struct Args {
 
 #[derive(Subcommand)]
 enum MPMCommand {
+	// uses a directory with a muse-package.toml to load in packages
 	Install {
 		#[arg(short = 'c', long)]
-		path: Option<PathBuf>,
+		myth: Option<PathBuf>,
 	},
-	/// Build command takes input and output paths
+	/// Takes a directory of .cs files and combines them into a single one
 	Build {
 		#[arg(short, long)]
 		input: PathBuf,
@@ -49,13 +50,13 @@ async fn main() {
 
 	match args.command {
 		MPMCommand::Install { 
-			path, 
+			myth, 
 		} => {
 			let cwd = env::current_dir().unwrap();
 			let cwd_path: &Path = cwd.as_path();
 			let mut mpm_packages: Vec<MPMPackage> = Vec::new();
-			if path.is_some(){
-				let package_path = path.unwrap();
+			if myth.is_some(){
+				let package_path = myth.unwrap();
 				let mpm_package_opt = find_package(package_path.as_path());
 				let mpm_package = mpm_package_opt.expect(format!("couldn't find '{}' at '{}'", FILE_NAME_STRING, package_path.to_str().unwrap()).as_str());
 				mpm_packages.insert(mpm_packages.len(), mpm_package);

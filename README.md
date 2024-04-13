@@ -4,11 +4,19 @@
 Say hello to the bare minimum for a package manager! This will compile open source muse packages into a single source, allowing for you to mass update your myth's dependencies with a single command.
 
 ## Running
+
+### All Myths in Map
 To run, in vscodium just call
 ```sh
 path-to-mpm.exe install
 ```
-and it should update all of your scripts!
+
+### Specific Myth
+To run, in vscodium just call
+```sh
+path-to-mpm.exe install --myth MythNameHere
+```
+
 
 ## Config Format
 This is used at a myth level to determine which packages to download. It needs to be named `muse-package.toml`, otherwise it wont' be detected.

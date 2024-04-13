@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-cargo run -- install --path test/main
+cargo run -- install --myth test/main

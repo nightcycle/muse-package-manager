@@ -1,8 +1,8 @@
 // DO NOT EDIT!
 // downloaded from 'https://github.com/nightcycle/muse-packages' and compiled into single script using 'github.com/nightcycle/muse-package-manager'
 
-using System;
 using System.Collections.Generic;
+using System;
 namespace Signal
 {
 	// the bound functionality, needs to be disconnected to avoid memory leaks
