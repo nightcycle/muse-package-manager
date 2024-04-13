@@ -60,6 +60,7 @@ fn get_matching_lines(input: &str, pattern: &Regex) -> Vec<String> {
  }
 
 pub fn compile_to_single_script(
+	header_comment: String,
 	target_namespace: String, 
 	dependency_scripts: HashMap<String, String>
 ) -> String{
@@ -113,5 +114,5 @@ pub fn compile_to_single_script(
 	// 	mega_script = mega_script.replace(&key.replace("namespace ", "using "), &format!("using {}",value));
 	// }
 	
-	return mega_script;
+	return format!("// {}\n{}", header_comment, mega_script);
 }

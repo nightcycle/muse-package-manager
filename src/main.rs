@@ -66,7 +66,11 @@ async fn main() {
 					}
 				}
 			}
-			let content: String = compile_to_single_script(target_namespace_name, scripts);
+			let content: String = compile_to_single_script(
+				String::from("DO NOT EDIT!\nCompiled using 'github.com/nightcycle/muse-package-manager'"),
+				target_namespace_name, 
+				scripts
+			);
 			if output.exists(){
 				fs::remove_file(output.clone()).expect("bad remove");
 			}

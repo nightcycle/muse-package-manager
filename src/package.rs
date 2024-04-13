@@ -48,7 +48,6 @@ impl MPMDependency {
 
 		let content: String;
 		(new_source_cache, content) = self.source.solve(self.name, new_source_cache.clone()).await;
-		println!("content={}", content);
 		if self.path_buf.exists(){
 			fs::remove_file(self.path_buf.clone()).expect("remove fail");
 		}

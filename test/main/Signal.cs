@@ -1,6 +1,6 @@
 
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
 namespace Signal
 {
 	// the bound functionality, needs to be disconnected to avoid memory leaks

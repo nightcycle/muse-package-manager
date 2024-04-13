@@ -74,7 +74,8 @@ pub enum SourceType {
 pub struct PackageSourceContent{
 	pub key: String,
 	inner_path: String,
-	data: bytes::Bytes
+	data: bytes::Bytes,
+	source_url: String,
 }
 
 impl PackageSourceContent {
@@ -151,7 +152,8 @@ impl PackageSourceContent {
 		return PackageSourceContent{
 			key,
 			inner_path,
-			data
+			data,
+			source_url
 		};
 	}
 
@@ -170,29 +172,43 @@ impl PackageSourceContent {
 		unzip_file_to_directory(file_path.as_path(), unzip_dir_path.as_path());
 
 		let inner_dir_path: PathBuf = find_single_subdirectory(&unzip_dir_path).unwrap();
-		let target_package_dir_path: PathBuf = inner_dir_path.join(self.inner_path);
+		let target_package_path: PathBuf = inner_dir_path.join(self.inner_path);
 
-		// let source_namespace: String = target_package_dir_path.file_stem().unwrap().to_str().unwrap().to_string();
-
+		// let source_namespace: String = target_package_path.file_stem().unwrap().to_str().unwrap().to_string();
+		let tpdp_clone = target_package_path.clone();
+		let target_path_debug_str: &str = tpdp_clone.to_str().unwrap();
 		let mut scripts: HashMap<String, String> = HashMap::new();
 
-		for entry in fs::read_dir(target_package_dir_path).unwrap() {
-			let entry = entry.unwrap();
-			let path = entry.path();
-			
-			// Ensure the entry is a file
-			if path.is_file() {
-				// Get the file name as a String
-				if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-					// Read the file's contents into a String
-					let contents = fs::read_to_string(&path).unwrap();
-					// Insert the file name and contents into the map
-					scripts.insert(name.to_owned(), contents);
+
+		if target_package_path.is_file(){
+			if let Some(name) = target_package_path.file_name().and_then(|n| n.to_str()) {
+				let contents: String = fs::read_to_string(&target_package_path).unwrap();
+				scripts.insert(name.to_owned(), contents);
+			}
+		}else if target_package_path.is_dir() {
+			for entry in fs::read_dir(target_package_path).expect(&format!("can't read directory '{}'", target_path_debug_str)) {
+				let entry = entry.unwrap();
+				let path = entry.path();
+				
+				// Ensure the entry is a file
+				if path.is_file() {
+					// Get the file name as a String
+					if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+						// Read the file's contents into a String
+						let contents = fs::read_to_string(&path).unwrap();
+						// Insert the file name and contents into the map
+						scripts.insert(name.to_owned(), contents);
+					}
 				}
 			}
 		}
+
 		
-		return compile_to_single_script(target_namespace_name, scripts);
+		return compile_to_single_script(
+			format!("DO NOT EDIT!\ndownloaded from '{}' and compiled into single script using 'github.com/nightcycle/muse-package-manager'", self.source_url),
+			target_namespace_name, 
+			scripts
+		);
 	}
 }
 
