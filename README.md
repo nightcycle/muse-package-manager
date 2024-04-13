@@ -1,5 +1,5 @@
 # Muse Package Manager (MPM)
-
+[![Release](https://github.com/nightcycle/muse-package-manager/actions/workflows/release.yml/badge.svg)](https://github.com/nightcycle/muse-package-manager/actions/workflows/release.yml)
 Say hello to the bare minimum for a package manager! This will compile open source muse packages into a single source, allowing for you to mass update your myth's dependencies with a single command.
 
 ## Running
