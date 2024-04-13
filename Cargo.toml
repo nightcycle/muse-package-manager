@@ -25,6 +25,7 @@ tempfile = "3.10.1"
 reqwest = "0.12.3"
 zip = "0.6.6"
 bytes = "1.6.0"
-pest = "2.7.9"
-pest_derive = "2.7.9"
+rand = "0.8.5"
+regex = "1.10.4"
+
 

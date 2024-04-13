@@ -1,8 +1,53 @@
 
 using System.Collections.Generic;
 using System;
-namespace Signal
+using MuseDotNet.Framework;
+namespace BuildTest
 {
+	public class StepService
+	{
+		private static readonly StepService instance = new StepService();
+		public Signal<double> OnStep = new();
+		public double Time = 0;
+		// set up as singleton
+		private static StepService instance;
+		public static StepService Instance
+		{
+			get
+			{
+				instance ??= new StepService();
+				return instance;
+			}
+		}
+		private StepService(){}
+	}
+	
+	public class VolumeScriptNameHere : Spawner
+	{
+		readonly Timer Timer = new();
+		double LastUpdate = 0;
+		protected override void OnBegin()
+		{
+			base.OnBegin();
+			Timer.Start();
+		}
+		protected override void OnEnd()
+		{
+			base.OnEnd();
+		}
+		public override Actor Spawn()
+		{
+			StepService.Instance.Time = Timer.ElapsedSeconds;
+			double deltaTime = StepService.Instance.Time - LastUpdate;
+			if (deltaTime > 0.005){
+				LastUpdate = StepService.Instance.Time;
+				StepService.Instance.OnStep.Fire(deltaTime);
+			}
+			Actor actor = base.Spawn();
+			actor.Remove();
+			return actor;
+		}
+	}
 	// the bound functionality, needs to be disconnected to avoid memory leaks
 	public class SignalConnection<V>(Action<V> onInvoke, Action<SignalConnection<V>> onDisconnectInvoke)
 	{

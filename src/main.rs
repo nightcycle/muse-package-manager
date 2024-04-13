@@ -1,9 +1,7 @@
-#[macro_use]
-extern crate pest_derive;
-extern crate pest;
+extern crate regex;
+extern crate rand;
 
 use std::fs;
-use std::io::Write;
 use clap::{Parser, Subcommand};
 use libmuse::package::{search_for_packages, MPMPackage};
 use libmuse::package_source::PackageSourceContent;
@@ -47,10 +45,11 @@ async fn main() {
 			input, 
 			output 
 		} => {
-			let namespace_name: String = output.file_stem().unwrap().to_str().unwrap().to_string();
+			// let source_namespace_name: String = input.file_stem().unwrap().to_str().unwrap().to_string();
+			let target_namespace_name: String = output.file_stem().unwrap().to_str().unwrap().to_string();
 			let mut scripts: HashMap<String, String> = HashMap::new();
 
-			println!("Building from {:?} to {:?} as {}", input, output, namespace_name);
+			println!("Building from {:?} to {:?}", input, output);
 			for entry in fs::read_dir(input).unwrap() {
 				let entry = entry.unwrap();
 				let path = entry.path();
@@ -66,7 +65,7 @@ async fn main() {
 					}
 				}
 			}
-			let content: String = compile_to_single_script(namespace_name, scripts);
+			let content: String = compile_to_single_script(target_namespace_name, scripts);
 			if output.exists(){
 				fs::remove_file(output.clone()).expect("bad remove");
 			}

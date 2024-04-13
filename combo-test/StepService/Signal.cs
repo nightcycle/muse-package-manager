@@ -1,8 +1,10 @@
-
-using System.Collections.Generic;
+// written by CJ_Oyer (@nightcycle)
+// a basic signal class
 using System;
-namespace Signal
+using System.Collections.Generic;
+namespace Packages
 {
+
 	// the bound functionality, needs to be disconnected to avoid memory leaks
 	public class SignalConnection<V>(Action<V> onInvoke, Action<SignalConnection<V>> onDisconnectInvoke)
 	{
@@ -12,21 +14,26 @@ namespace Signal
 			this.OnDisconnectInvoke(this);
 		}
 	}
+
 	// the event to fire
 	public class Signal<V> {
+
 		// list of connections the signal iterates through when firing
 		private readonly List<SignalConnection<V>> Connections = new();
 		private bool IsAlive = true;
+
 		// the internal method passed to all connections to allow them to disconnect
 		private void Disconnect(SignalConnection<V> connection){
 			if (this.Connections.Contains(connection) == true){
 				this.Connections.Remove(connection);
 			}
 		}
+
 		// get if this signal has anything connected
 		public bool HasConnections(){
 			return this.Connections.Count > 0;
 		}
+
 		// fire all the connections
 		public void Fire(V value){
 			List<SignalConnection<V>> connections = new(this.Connections);
@@ -34,12 +41,14 @@ namespace Signal
 				connection.OnInvoke.Invoke(value);
 			}
 		}
+
 		// create a signal connection bound to a specific action
 		public SignalConnection<V> Connect(Action<V> onInvoke){
 			SignalConnection<V> connection = new SignalConnection<V>(onInvoke, this.Disconnect);
 			this.Connections.Add(connection);
 			return connection;
 		}
+
 		public void Destroy(){
 			if (this.IsAlive){
 				this.IsAlive = false;
@@ -49,6 +58,7 @@ namespace Signal
 				}
 			}
 		}
+
 		
 		public Signal(){}		
 	}

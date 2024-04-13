@@ -30,7 +30,6 @@ namespace StepService
 			}
 		}
 
-
 		private StepService(){}
 	}
 	

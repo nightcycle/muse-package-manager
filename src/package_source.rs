@@ -155,7 +155,7 @@ impl PackageSourceContent {
 		};
 	}
 
-	pub fn compile(self: Self, namespace_name: String) -> String{
+	pub fn compile(self: Self, target_namespace_name: String) -> String{
 		println!("compiling {}", self.key);
 		// Create a temporary directory
 		let dir: tempfile::TempDir = tempdir().unwrap();
@@ -163,7 +163,7 @@ impl PackageSourceContent {
 		let file_path: std::path::PathBuf = dir_path.join("source.zip");
 
 		let mut file: File = File::create(file_path.clone()).unwrap();
-		let mut content =  std::io::Cursor::new(self.data);
+		let mut content: io::Cursor<bytes::Bytes> =  std::io::Cursor::new(self.data);
 		copy(&mut content, &mut file).unwrap();
 
 		let unzip_dir_path: std::path::PathBuf = dir_path.join("unzipped_directory");
@@ -171,6 +171,8 @@ impl PackageSourceContent {
 
 		let inner_dir_path: PathBuf = find_single_subdirectory(&unzip_dir_path).unwrap();
 		let target_package_dir_path: PathBuf = inner_dir_path.join(self.inner_path);
+
+		// let source_namespace: String = target_package_dir_path.file_stem().unwrap().to_str().unwrap().to_string();
 
 		let mut scripts: HashMap<String, String> = HashMap::new();
 
@@ -190,7 +192,7 @@ impl PackageSourceContent {
 			}
 		}
 		
-		return compile_to_single_script(namespace_name, scripts);
+		return compile_to_single_script(target_namespace_name, scripts);
 	}
 }
 
