@@ -48,24 +48,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact-name: muse-package-manager-windows-x86_64
-            artifact-alias: muse-package-manager-win64
+            artifact-name: mpm-windows-x86_64
+            artifact-alias: mpm-win64
             cargo-target: x86_64-pc-windows-msvc
-          # - os: ubuntu-20.04
-          #   artifact-name: muse-package-manager-linux-x86_64
-          #   artifact-alias: muse-package-manager-linux
-          #   cargo-target: x86_64-unknown-linux-gnu
-          # - os: ubuntu-20.04
-          #   artifact-name: muse-package-manager-linux-aarch64
-          #   cargo-target: aarch64-unknown-linux-gnu
-          #   linker: gcc-aarch64-linux-gnu
-          # - os: macos-latest
-          #   artifact-name: muse-package-manager-macos-x86_64
-          #   artifact-alias: muse-package-manager-macos
-          #   cargo-target: x86_64-apple-darwin
-          # - os: macos-latest
-          #   artifact-name: muse-package-manager-macos-aarch64
-          #   cargo-target: aarch64-apple-darwin
 
     name: Build (${{ matrix.artifact-name }})
     runs-on: ${{ matrix.os }}
@@ -94,11 +79,11 @@ jobs:
           mkdir -p staging
 
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp "output/${{ matrix.cargo-target }}/release/muse_package_manager.exe" staging/
+            cp "output/${{ matrix.cargo-target }}/release/mpm.exe" staging/
             cd staging
             7z a ../release.zip *
           else
-            cp "output/${{ matrix.cargo-target }}/release/muse-package-manager" staging/
+            cp "output/${{ matrix.cargo-target }}/release/mpm" staging/
             cd staging
             zip ../release.zip *
           fi
