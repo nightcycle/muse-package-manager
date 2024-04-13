@@ -11,7 +11,7 @@ path-to-mpm.exe install
 and it should update all of your scripts!
 
 ## Config Format
-This is used at a myth level to determine which packages to download.
+This is used at a myth level to determine which packages to download. It needs to be named `muse-package.toml`, otherwise it wont' be detected.
 
 Example:
 ```toml
