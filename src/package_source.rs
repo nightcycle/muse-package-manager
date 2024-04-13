@@ -106,9 +106,7 @@ pub enum SourceType {
 
 #[derive(Debug, Clone)]
 pub struct PackageSourceContent{
-	pub key: String,
-	inner_path: String,
-	data: bytes::Bytes,
+	pub data: bytes::Bytes,
 	pub version: Version,
 	pub source_url: PathBuf,
 }
@@ -118,7 +116,6 @@ impl PackageSourceContent {
 		source_url: PathBuf,
 		version_req: VersionReq,
 		source_type: SourceType,
-		inner_path: String,
 	) -> Self{
 		let source_url_str: &str = source_url.to_str().unwrap();
 		println!("downloading {}", &source_url_str);
@@ -180,23 +177,18 @@ impl PackageSourceContent {
 				Err(e) => panic!("{}", e),
 			};
 
-		let data = response.bytes().await.unwrap();
+		let data: bytes::Bytes = response.bytes().await.unwrap();
 
-		// let version = release_version_option.unwrap();
-		let key = format!("github->{}@{}", info_string.to_string(), release_tag);
-		println!("key='{}'", key);
 		let version: Version = release_version_option.unwrap();
 		return PackageSourceContent{
-			key,
-			inner_path,
 			data,
 			version,
 			source_url
 		};
 	}
 
-	pub fn compile(self: Self, target_namespace_name: String) -> String{
-		println!("compiling {}", self.key);
+	pub fn compile(self: Self, target_namespace_name: String, inner_path: String) -> String{
+		println!("compiling {}", target_namespace_name);
 		// Create a temporary directory
 		let dir: tempfile::TempDir = tempdir().unwrap();
 		let dir_path: &Path = dir.path();
@@ -210,7 +202,7 @@ impl PackageSourceContent {
 		unzip_file_to_directory(file_path.as_path(), unzip_dir_path.as_path());
 
 		let inner_dir_path: PathBuf = find_single_subdirectory(&unzip_dir_path).unwrap();
-		let target_package_path: PathBuf = inner_dir_path.join(self.inner_path);
+		let target_package_path: PathBuf = inner_dir_path.join(inner_path);
 
 		// let source_namespace: String = target_package_path.file_stem().unwrap().to_str().unwrap().to_string();
 		let tpdp_clone = target_package_path.clone();
@@ -297,19 +289,18 @@ impl PackageSource {
 		
 		if content_option.is_some(){		
 			let package_source_content: PackageSourceContent = content_option.unwrap();
-			return (source_cache, package_source_content.compile(namespace_name));
+			return (source_cache, package_source_content.compile(namespace_name, self.inner_path));
 		}else{
 			let package_source_content: PackageSourceContent = PackageSourceContent::new(
 				self.source_url, 
 				self.version_req, 
-				self.source_type, 
-				self.inner_path
+				self.source_type
 			).await;
 
 			
 			let new_source_cache: HashMap<PathBuf, HashMap<Version, PackageSourceContent>> = save_psc_into_cache(package_source_content.clone(), source_cache);
 
-			return (new_source_cache, package_source_content.compile(namespace_name));
+			return (new_source_cache, package_source_content.compile(namespace_name, self.inner_path));
 		}
 
 	}
