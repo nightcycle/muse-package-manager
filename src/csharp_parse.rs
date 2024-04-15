@@ -83,6 +83,7 @@ pub fn compile_to_single_script(
 
 	let mut usage_list: Vec<String> = get_matching_lines(&mega_script, &using_pattern);
 	usage_list = deduplicate(usage_list);
+	usage_list.sort();
 	mega_script = remove_matching_lines(&mega_script, &using_pattern);
 
 	mega_script = extract_indented_lines(mega_script.as_str());
