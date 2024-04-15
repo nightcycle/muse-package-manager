@@ -65,16 +65,28 @@ pub fn compile_to_single_script(
 	dependency_scripts: HashMap<String, String>
 ) -> String{
 	
+	let mut keys: Vec<String> = Vec::new();
+	for (dep_name, _dep_value) in &dependency_scripts {
+		keys.insert(keys.len(), dep_name.clone());
+	}
+	keys.sort();
+
+
+
 	let namespace_pattern: Regex = Regex::new(r"namespace\s+[A-Za-z0-9]").unwrap();
 	let using_pattern: Regex = Regex::new(r"using [A-Za-z]+").unwrap();
 
 	let mut mega_script: String = String::new();
 
 	let mut prior_namespaces: Vec<String> = Vec::new();
-	for (_dep_name, dep_value) in &dependency_scripts {
-		mega_script.push_str(&format!("\n{}", dep_value));
-		prior_namespaces.append(& mut get_matching_lines(dep_value, &namespace_pattern));
+
+	for key in keys {
+		if let Some(dep_value) = dependency_scripts.get(&key) {
+			mega_script.push_str(&format!("\n{}", dep_value));
+			prior_namespaces.append(& mut get_matching_lines(dep_value, &namespace_pattern));
+		}
 	}
+
 	let cleaned_namespaces: Vec<String> = prior_namespaces
 		.iter()
 		.map(|s| s.replace("namespace ", ""))
