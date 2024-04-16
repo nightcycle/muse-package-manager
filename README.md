@@ -4,17 +4,18 @@
 Say hello to the bare minimum for a package manager! This will compile open source muse packages into a single source, allowing for you to mass update your myth's dependencies with a single command.
 
 ## Running
+You'll be unzipping a release, and putting the mpm.exe somewhere. I usually put it under userscripts so that I can call it from the vscodium terminal directly. If you put it elsewhere, replace "./mpm.exe" with the path to the exe.
 
 ### All Myths in Map
 To run, in vscodium just call
 ```sh
-path-to-mpm.exe install
+./mpm.exe install
 ```
 
 ### Specific Myth
 To run, in vscodium just call
 ```sh
-path-to-mpm.exe install --myth MythNameHere
+./mpm.exe install --myth MythNameHere
 ```
 
 
@@ -38,5 +39,5 @@ A dependency contains multiple parts
 
 The assembly logic is not bulletproof, double check your stuff compiles errorlessly with 
 ```sh 
-path-to-mpm.exe build --input dir-path-here --output file-path-here.cs
+./mpm.exe build --input dir-path-here --output file-path-here.cs
 ```
