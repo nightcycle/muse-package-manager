@@ -27,9 +27,11 @@ Example:
 deprecated = false # unimplemented, will eventually send a warning to anyone that installs it for them to update
 
 [dependencies]
-SignalProvider="https://github.com/nightcycle/muse-packages/releases/tag/v0.2.0/src/signal"
-OptionProvider="https://github.com/nightcycle/muse-packages/releases/tag/v0.2.0/src/option"
+_SignalProvider="https://github.com/nightcycle/muse-packages/releases/tag/v0.2.0/src/signal"
+_OptionProvider="https://github.com/nightcycle/muse-packages/releases/tag/v0.2.0/src/option"
 ```
+
+I recommend putting an underscore at the front of the package name so that it is sorted to the top of the directory, but it's fine if you don't.
 
 A dependency contains multiple parts
 - a name, used for the script name + namespace
