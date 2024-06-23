@@ -153,7 +153,7 @@ async fn main() {
 				}
 			}
 			let content: String = compile_to_single_script(
-				String::from("DO NOT EDIT!\nCompiled using 'github.com/nightcycle/muse-package-manager'"),
+				String::from("DO NOT EDIT!\n// Compiled using 'github.com/nightcycle/muse-package-manager'"),
 				target_namespace_name, 
 				scripts
 			);
